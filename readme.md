@@ -4,7 +4,7 @@ A full-stack web application that leverages AI to automatically extract and stru
 
 ## 🎯 Problem Statement
 
-**Goal:** Build a proof-of-concept containerized application that allows users to upload PDF files, uses an AI model to parse documents and extract tables, then displays the data in a clean, structured format.
+**Project Goal:** Build a proof-of-concept containerized application that allows users to upload PDF files, uses an AI model to parse documents and extract tables, then displays the data in a clean, structured format.
 
 **Core Requirements:**
 - Handle both digital and scanned PDFs (OCR capability)
@@ -24,7 +24,8 @@ A full-stack web application that leverages AI to automatically extract and stru
 └─────────────┘     └─────────────┘     └─────────────┘
        │                   │                     
        ▼                   ▼                     
-   Port 3000          Port 8000                  
+   Host: 3000         Host: 8000                  
+   Container: 5173    Container: 8000
 ```
 
 ### Workflow
@@ -71,10 +72,14 @@ services:
     
   frontend:
     - Node 20 Alpine base image
-    - React dev server on port 5173
+    - Vite dev server on port 5173 (container)
     - Mapped to host port 3000
     - Depends on backend service
 ```
+
+### Port Mapping
+- **Frontend**: Container port 5173 → Host port 3000
+- **Backend**: Container port 8000 → Host port 8000
 
 ### Key Containerization Features
 - **Isolated environments** for frontend and backend
@@ -94,7 +99,7 @@ services:
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/pdf-data-extractor.git
+git clone https://github.com/deshpande-atharva/AI-powered-PDF-extractor-and-Summarizer.git
 cd pdf-data-extractor
 ```
 
@@ -109,7 +114,7 @@ docker-compose up --build
 ```
 
 3. **Access the application**
-- Frontend: http://localhost:3000
+- Frontend: http://localhost:3000 (mapped from container port 5173)
 - Backend API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
 
@@ -148,6 +153,7 @@ pdf-data-extractor/
 │   │   ├── components/     # React components
 │   │   └── services/       # API services
 │   ├── package.json        # Node dependencies
+│   ├── vite.config.ts      # Vite configuration
 │   └── Dockerfile          # Frontend container config
 ├── docker-compose.yml      # Multi-container orchestration
 ├── .env.example           # Environment template
@@ -189,14 +195,14 @@ python generate_test_pdfs.py
 # Backend
 cd backend
 python -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 
-# Frontend
+# Frontend (separate terminal)
 cd frontend
 npm install
-npm run dev
+npm run dev  # Runs on port 5173
 ```
 
 ## 📊 Performance
@@ -222,7 +228,6 @@ MIT License - See LICENSE file for details
 ## 👨‍💻 Author
 
 Atharva Deshpande
-- LinkedIn: [Connect with me](https://www.linkedin.com/in/atharva-deshpande0205)
 - Email: deshpande.atha@northeastern.edu
 
 ---
