@@ -118,11 +118,9 @@ async def health():
 @app.post("/api/extract")
 async def extract_pdf_data(file: UploadFile = File(...)):
     try:
-        # Validate file
         if not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are allowed")
         
-        # Read and extract text from PDF
         content = await file.read()
         pdf_file = io.BytesIO(content)
         
@@ -133,10 +131,17 @@ async def extract_pdf_data(file: UploadFile = File(...)):
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
+            
+            # DEBUG: Print extracted text
+            print(f"DEBUG: Extracted {len(text)} characters from PDF")
+            print(f"DEBUG: First 200 chars: {text[:200]}")
+            
         except Exception as e:
+            print(f"ERROR reading PDF: {e}")
             raise HTTPException(status_code=422, detail=f"Could not read PDF: {str(e)}")
         
         if not text.strip():
+            print("DEBUG: No text found in PDF")
             return {
                 "success": False,
                 "filename": file.filename,
@@ -147,29 +152,42 @@ async def extract_pdf_data(file: UploadFile = File(...)):
                 }
             }
         
-        # Use Gemini REST API
+        # DEBUG: Check if API key exists
+        print(f"DEBUG: API Key present: {bool(GEMINI_API_KEY)}")
+        print(f"DEBUG: API Key (first 10 chars): {GEMINI_API_KEY[:10] if GEMINI_API_KEY else 'None'}")
+        
         if GEMINI_API_KEY:
             prompt = """
-            Extract all tabular data from this text. Focus on invoice data.
-            Return ONLY valid JSON with this exact structure:
+            Extract tabular data from this invoice text. 
+            Important: 
+            - Quantity should be a number without $ sign
+            - Price/Rate is the unit price
+            - Total/Amount is quantity × price
+            
+            For the invoice items table, use these exact headers:
+            ["Description", "Quantity", "Unit Price", "Total"]
+            
+            Return ONLY valid JSON:
             {
                 "tables": [
                     {
                         "title": "Invoice Items",
-                        "headers": ["Description", "Quantity", "Price", "Total"],
-                        "rows": [["Item 1", "2", "$10", "$20"]]
+                        "headers": ["Description", "Quantity", "Unit Price", "Total"],
+                        "rows": [
+                            ["item description", "quantity as number", "price with $", "total with $"]
+                        ]
                     }
                 ],
                 "summary": {
-                    "total_amount": 100,
+                    "total_amount": (final total as number),
                     "invoice_count": 1,
-                    "date_range": "2024-2025"
+                    "date_range": "date range string"
                 }
             }
             
-            Text: """ + text[:3000]
+            Invoice text to parse:
+            """ + text[:3000]
             
-            # Call Gemini REST API
             payload = {
                 "contents": [
                     {
@@ -181,11 +199,20 @@ async def extract_pdf_data(file: UploadFile = File(...)):
             }
             
             try:
+                print(f"DEBUG: Calling Gemini API at {GEMINI_API_URL}")
                 response = requests.post(GEMINI_API_URL, json=payload)
+                print(f"DEBUG: Gemini response status: {response.status_code}")
+                
+                if response.status_code != 200:
+                    print(f"DEBUG: Gemini error response: {response.text}")
+                    
                 response.raise_for_status()
                 
                 result = response.json()
+                print(f"DEBUG: Gemini response keys: {result.keys()}")
+                
                 generated_text = result['candidates'][0]['content']['parts'][0]['text']
+                print(f"DEBUG: Generated text (first 200 chars): {generated_text[:200]}")
                 
                 # Extract JSON from response
                 if "```json" in generated_text:
@@ -196,22 +223,32 @@ async def extract_pdf_data(file: UploadFile = File(...)):
                     generated_text = generated_text[start:end]
                 
                 data = json.loads(generated_text)
+                print(f"DEBUG: Parsed data successfully: tables={len(data.get('tables', []))}")
                 
             except requests.exceptions.RequestException as e:
-                print(f"API Error: {e}")
+                print(f"ERROR: API Request failed: {e}")
                 data = {
                     "tables": [],
                     "summary": None,
-                    "error": "Could not connect to Gemini API"
+                    "error": f"Could not connect to Gemini API: {str(e)}"
                 }
             except json.JSONDecodeError as e:
-                print(f"JSON Parse Error: {e}")
+                print(f"ERROR: JSON Parse failed: {e}")
+                print(f"DEBUG: Raw text that failed to parse: {generated_text if 'generated_text' in locals() else 'N/A'}")
                 data = {
                     "tables": [],
                     "summary": None,
                     "error": "Could not parse AI response"
                 }
+            except Exception as e:
+                print(f"ERROR: Unexpected error: {e}")
+                data = {
+                    "tables": [],
+                    "summary": None,
+                    "error": str(e)
+                }
         else:
+            print("DEBUG: No API key configured")
             data = {
                 "tables": [],
                 "summary": None,
@@ -219,6 +256,7 @@ async def extract_pdf_data(file: UploadFile = File(...)):
                 "text_preview": text[:500]
             }
         
+        print(f"DEBUG: Returning data with {len(data.get('tables', []))} tables")
         return {
             "success": True,
             "filename": file.filename,
@@ -228,4 +266,5 @@ async def extract_pdf_data(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
+        print(f"ERROR: Unexpected error in main handler: {e}")
         raise HTTPException(status_code=500, detail=str(e))
