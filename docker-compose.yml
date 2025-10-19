@@ -1,5 +1,4 @@
-version: "3.8"
-
+# docker-compose.yml
 services:
   backend:
     build:
@@ -9,20 +8,11 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # This will use the GEMINI_API_KEY passed at runtime
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-    env_file:
-      - .env
     networks:
       - pdf-network
     restart: unless-stopped
-    volumes:
-      - ./backend/app:/app/app:ro # Read-only for security
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
   frontend:
     build:
@@ -34,14 +24,10 @@ services:
     environment:
       - VITE_API_URL=http://localhost:8000
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
       - pdf-network
     restart: unless-stopped
-    volumes:
-      - ./frontend/src:/app/src:ro
-      - /app/node_modules # Prevent overwriting node_modules
 
 networks:
   pdf-network:
